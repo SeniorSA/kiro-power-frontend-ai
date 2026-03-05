@@ -83,13 +83,6 @@ Sem essas informações, não é possível criar o projeto corretamente.
 │   │   │       ├── <feature>.component.html
 │   │   │       ├── <feature>.config.ts
 │   │   │       └── <feature>.service.ts   # (opcional, se não usar core/services)
-│   │   ├── locale/                        # Traduções i18n
-│   │   │   ├── pt-BR.json
-│   │   │   ├── en-US.json
-│   │   │   ├── es-ES.json
-│   │   │   ├── fallback.ts               # Gerado automaticamente
-│   │   │   ├── index.ts                  # Exports e mapa de traduções
-│   │   │   └── locale.config.ts          # Configuração de locale
 │   │   ├── shared/                        # Compartilhado entre features
 │   │   │   ├── components/
 │   │   │   │   └── theme-toggle/
@@ -103,6 +96,13 @@ Sem essas informações, não é possível criar o projeto corretamente.
 │   │   ├── app.component.scss
 │   │   ├── app.config.ts
 │   │   └── app.routes.ts
+│   ├── locale/                            # Traduções i18n (FORA de app/)
+│   │   ├── pt-BR.json                    # Português (idioma principal)
+│   │   ├── en-US.json                    # Inglês
+│   │   ├── es-ES.json                    # Espanhol
+│   │   ├── fallback.ts                   # Gerado automaticamente pelo translations.js
+│   │   ├── index.ts                      # Exports e mapa de traduções
+│   │   └── locale.config.ts              # Configuração e utilitários de validação
 │   ├── assets/
 │   │   └── tailwind.css
 │   ├── environments/
@@ -182,6 +182,15 @@ import { provideSeniorPrimeNG, apiInterceptor } from '@seniorsistemas/components
 
 provideSeniorPrimeNG({ darkModeSelector: '.app-dark' }),
 provideHttpClient(withInterceptors([apiInterceptor])),
+{
+  provide: 'TranslationLoader',
+  useValue: {
+    loadTranslations: async (language: string) => {
+      const translations = await import(`../locale/${language}.json`);
+      return translations.default || translations;
+    }
+  }
+}
 ```
 
 ### Import de Estilos
@@ -192,6 +201,23 @@ No `styles.scss`:
 ```
 
 ## Padrão de Traduções (i18n)
+
+### Localização dos Arquivos
+
+Os arquivos de tradução ficam em `src/locale/` (fora de `src/app/`):
+
+```
+src/
+├── app/
+│   └── ...
+├── locale/
+│   ├── pt-BR.json          # Português (idioma principal/fallback)
+│   ├── en-US.json           # Inglês
+│   ├── es-ES.json           # Espanhol
+│   ├── fallback.ts          # Gerado automaticamente
+│   ├── index.ts             # Exports e mapa de traduções
+│   └── locale.config.ts     # Configuração e utilitários
+```
 
 ### Formato das Chaves
 
@@ -215,27 +241,208 @@ Exemplos:
 
 | Categoria | Padrão | Exemplo |
 |-----------|--------|---------|
+| Título do app | `<d>.<s>.app_title` | `crmx.account.app_title` |
 | Ações gerais | `<d>.<s>.save`, `cancel`, `delete`, `edit`, `add` | `crmx.account.save` |
 | Entidade singular | `<d>.<s>.<entity_name>` | `crmx.account.account_stage` |
 | Entidade plural | `<d>.<s>.<entity_name>s` | `crmx.account.account_stages` |
 | Breadcrumb | `<d>.<s>.breadcrumb_<entity>` | `crmx.account.breadcrumb_account_stage` |
 | Subtítulo | `<d>.<s>.<entity>_subtitle` | `crmx.account.account_stage_subtitle` |
 | Novo/Editar | `<d>.<s>.<entity>_new`, `<entity>_edit` | `crmx.account.account_stage_new` |
-| Status | `<d>.<s>.status_active`, `status_inactive` | `crmx.account.status_active` |
+| Status | `<d>.<s>.status_active`, `status_inactive`, `status_deleted` | `crmx.account.status_active` |
 | Erros | `<d>.<s>.error_<contexto>` | `crmx.account.error_loading_data` |
+| Erros de página | `<d>.<s>.error_page_not_found_title`, `error_access_denied_title`, `error_unauthorized_title` | `crmx.account.error_page_not_found_title` |
 | Exportação | `<d>.<s>.export_<contexto>` | `crmx.account.export_button` |
 | Bulk delete | `<d>.<s>.bulk_delete_<contexto>` | `crmx.account.bulk_delete_message` |
+| Filtros | `<d>.<s>.filter_search_placeholder`, `filter_select_placeholder` | `crmx.account.filter_search_placeholder` |
+| Formulários | `<d>.<s>.enter_<field>`, `select_<field>` | `crmx.account.enter_name` |
+| Validação | `<d>.<s>.required_field`, `min_length_error`, `max_length_error` | `crmx.account.required_field` |
+| CRUD genérico | `<d>.<s>.entity_created_success`, `entity_updated_success`, `entity_deleted_success` | `crmx.account.entity_created_success` |
+| Registros | `<d>.<s>.record_created_successfully`, `record_deleted_successfully` | `crmx.account.record_created_successfully` |
+| Paginação | `<d>.<s>.pagination_template` | `crmx.account.pagination_template` |
 | Interpolação | `{{variavel}}` | `"{{entityName}} criado com sucesso"` |
+| Interpolação PrimeNG | `{variavel}` | `"Mostrando {first} a {last} de {totalRecords} registros"` |
 
 ### Idiomas Suportados
 
-- `pt-BR.json` — Português (principal)
+- `pt-BR.json` — Português (principal, usado como base para fallback)
 - `en-US.json` — Inglês
 - `es-ES.json` — Espanhol
+
+### Arquivo locale.config.ts
+
+Configuração e utilitários de validação de traduções. Importa `SupportedLanguage` do components-ai:
+
+```typescript
+import { SupportedLanguage } from '@seniorsistemas/components-ai';
+
+export const LOCALE_CONFIG = {
+  basePath: './locale',
+  fileExtension: '.json',
+  languageFiles: {
+    'pt-BR': 'pt-BR',
+    'en-US': 'en-US',
+    'es-ES': 'es-ES'
+  } as Record<SupportedLanguage, string>,
+  requiredKeys: [
+    '<dominio>.<servico>.app_title',
+    '<dominio>.<servico>.save',
+    '<dominio>.<servico>.cancel',
+    '<dominio>.<servico>.delete',
+    '<dominio>.<servico>.select_language'
+  ],
+  keyPrefix: '<dominio>.<servico>'
+};
+
+// Utilitário para gerar o caminho completo do arquivo de tradução
+export function getTranslationFilePath(language: SupportedLanguage): string {
+  const fileName = LOCALE_CONFIG.languageFiles[language];
+  return `${LOCALE_CONFIG.basePath}/${fileName}${LOCALE_CONFIG.fileExtension}`;
+}
+
+// Utilitário para validar se uma chave segue o padrão correto
+export function isValidTranslationKey(key: string): boolean {
+  return key.startsWith(LOCALE_CONFIG.keyPrefix + '.');
+}
+
+// Utilitário para gerar uma chave de tradução válida
+export function createTranslationKey(subKey: string): string {
+  return `${LOCALE_CONFIG.keyPrefix}.${subKey}`;
+}
+
+// Utilitário para validar se um arquivo de tradução tem a estrutura correta
+export function validateTranslationFile(translations: any): { isValid: boolean; errors: string[] } {
+  const errors: string[] = [];
+  if (!translations || typeof translations !== 'object') {
+    errors.push('Arquivo de tradução deve ser um objeto JSON válido');
+    return { isValid: false, errors };
+  }
+  for (const requiredKey of LOCALE_CONFIG.requiredKeys) {
+    if (!translations[requiredKey]) {
+      errors.push(`Chave obrigatória ausente: ${requiredKey}`);
+    }
+  }
+  for (const key in translations) {
+    if (key.startsWith('_')) continue;
+    if (!isValidTranslationKey(key)) {
+      errors.push(`Chave inválida (não segue o padrão): ${key}`);
+    }
+    if (typeof translations[key] !== 'string') {
+      errors.push(`Valor deve ser string para a chave: ${key}`);
+    }
+  }
+  return { isValid: errors.length === 0, errors };
+}
+
+// Utilitário para verificar se a estrutura é plana (não aninhada)
+export function isFlatStructure(obj: any): boolean {
+  for (const key in obj) {
+    if (key.startsWith('_')) continue;
+    if (typeof obj[key] === 'object' && obj[key] !== null) {
+      return false;
+    }
+  }
+  return true;
+}
+```
+
+### Arquivo index.ts
+
+Exporta os arquivos de tradução para uso direto e lazy loading:
+
+```typescript
+// Exportações dos arquivos de tradução para facilitar importações
+export { default as ptBR } from './pt-BR.json';
+export { default as enUS } from './en-US.json';
+export { default as esES } from './es-ES.json';
+
+// Mapa de traduções para uso programático (lazy loading)
+export const translations = {
+  'pt-BR': () => import('./pt-BR.json'),
+  'en-US': () => import('./en-US.json'),
+  'es-ES': () => import('./es-ES.json')
+};
+
+// Lista de idiomas disponíveis
+export const availableLanguages = ['pt-BR', 'en-US', 'es-ES'] as const;
+```
 
 ### Arquivo fallback.ts
 
 Gerado automaticamente pelo script `translations.js` a partir do `pt-BR.json`. Executado no build via `npm run translations`.
+
+O arquivo gerado tem o formato:
+```typescript
+export const fallback: any = {
+    "<dominio>.<servico>.save": "Salvar",
+    "<dominio>.<servico>.cancel": "Cancelar",
+    // ... todas as chaves do pt-BR.json
+};
+```
+
+### Script translations.js (raiz do projeto)
+
+```javascript
+const fs = require('fs');
+const fallback = require('./src/locale/pt-BR.json');
+const translationPath = 'src/locale/fallback.ts';
+
+fs.writeFile(
+    `${translationPath}`,
+    `export const fallback: any = ${JSON.stringify(fallback, null, 4)};
+`,
+    (err) => err && console.error(`Error writing file ${translationPath}: ${err}`)
+);
+```
+
+### Integração no app.config.ts
+
+O carregamento de traduções é configurado via provider `TranslationLoader` com dynamic import:
+
+```typescript
+import { ApplicationConfig, provideZoneChangeDetection } from '@angular/core';
+import { provideRouter, withHashLocation } from '@angular/router';
+import { provideAnimations } from '@angular/platform-browser/animations';
+import { provideHttpClient, withInterceptors } from '@angular/common/http';
+import { provideSeniorPrimeNG, apiInterceptor } from '@seniorsistemas/components-ai';
+
+import { routes } from './app.routes';
+
+export const appConfig: ApplicationConfig = {
+  providers: [
+    provideZoneChangeDetection({ eventCoalescing: true }),
+    provideRouter(routes, withHashLocation()),
+    provideAnimations(),
+    provideHttpClient(withInterceptors([apiInterceptor])),
+    provideSeniorPrimeNG({
+      darkModeSelector: '.app-dark'
+    }),
+    {
+      provide: 'TranslationLoader',
+      useValue: {
+        loadTranslations: async (language: string) => {
+          const translations = await import(`../locale/${language}.json`);
+          return translations.default || translations;
+        }
+      }
+    }
+  ]
+};
+```
+
+Note que o import usa `../locale/` (relativo a `src/app/`), pois a pasta `locale/` fica em `src/locale/`.
+
+### Uso no Código
+
+```typescript
+// Via TranslationService (injetado)
+translationService.translate('<dominio>.<servico>.save');
+
+// Com interpolação
+translationService.translate('<dominio>.<servico>.entity_created_success', { entityName: 'Conta' });
+
+// Via pipe no template
+{{ '<dominio>.<servico>.save' | translate }}
+```
 
 ## Padrão de Services
 
